@@ -1,5 +1,5 @@
 blueprint:
-  name: Window - Heating Control (Open/Close)
+  name: Window - Heating Control (Open/Close) [WHC]
   description: >
     Automate your heating system based on window status to improve energy efficiency. 
 
