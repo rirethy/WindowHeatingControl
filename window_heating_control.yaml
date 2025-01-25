@@ -1,0 +1,157 @@
+blueprint:
+  name: EN DEV Fenêtre - Contrôle du chauffage (ouverture/fermeture)
+  description: >
+    Automate your heating system based on window status to improve energy efficiency. 
+
+    ## Features:
+      - Temporarily disables heating when a window is opened.
+      - Automatically restores heating once the window is closed.
+      - Optionally sends real-time notifications to mobile devices with room and temperature details.
+
+    **Note:** Ensure your window sensors and climate devices are properly configured for seamless operation.
+
+    [GitHub Repository](https://github.com/your-repo/your-blueprint)
+  domain: automation
+  input:
+    window_sensor:
+      name: Fenêtre - Capteur d'ouverture
+      description: Capteur d'ouverture de la fenêtre.
+      selector:
+        entity:
+          domain: binary_sensor
+    climate_entities:
+      name: Chauffage - Entités de climatisation
+      description: Entités de climatisation à contrôler.
+      default: []
+      selector:
+        entity:
+          domain: climate
+          multiple: true
+    notify_devices:
+      name: Appareils de notification (facultatif)
+      description: Liste des appareils mobiles pour les notifications. Laissez vide pour ne pas envoyer de notification.
+      default: []
+      selector:
+        device:
+          integration: mobile_app
+          multiple: true
+    room_name:
+      name: Nom de la pièce
+      description: Nom de la pièce pour les notifications.
+    window_opened_flag:
+      name: Indicateur de fenêtre ouverte
+      description: Input boolean pour indiquer si la fenêtre a été ouverte.
+      selector:
+        entity:
+          domain: input_boolean
+    window_open_duration:
+      name: Durée avant arrêt du chauffage (fenêtre ouverte)
+      description: Durée en secondes avant d'arrêter le chauffage lorsque la fenêtre est ouverte.
+      default: 45
+      selector:
+        number:
+          min: 10
+          max: 600
+          unit_of_measurement: seconds
+    window_close_duration:
+      name: Durée avant reprise du chauffage (fenêtre fermée)
+      description: Durée en minutes avant de reprendre le chauffage lorsque la fenêtre est fermée.
+      default: 15
+      selector:
+        number:
+          min: 1
+          max: 60
+          unit_of_measurement: minutes
+
+variables:
+  room_name: !input room_name
+  climate_entities: !input climate_entities
+  notify_devices: !input notify_devices
+  window_opened_flag: !input window_opened_flag
+  current_temperature: "{{ states('sensor.noisetiers_noisetiers_noisetiers_exterieur_temperature') | float }}"
+  temperature_unit: "{{ state_attr('sensor.noisetiers_noisetiers_noisetiers_exterieur_temperature', 'unit_of_measurement') }}"
+  window_open_duration: !input window_open_duration
+  window_close_duration: !input window_close_duration
+
+trigger:
+  - platform: state
+    entity_id: !input window_sensor
+    to: "on"
+    for:
+      seconds: !input window_open_duration
+  - platform: state
+    entity_id: !input window_sensor
+    to: "off"
+    for:
+      minutes: !input window_close_duration
+
+condition: []
+
+action:
+  - choose:
+      - conditions:
+          - condition: state
+            entity_id: !input window_sensor
+            state: "on"
+        sequence:
+          - service: input_boolean.turn_on
+            target:
+              entity_id: !input window_opened_flag
+          - repeat:
+              for_each: "{{ climate_entities }}"
+              sequence:
+                - condition: template
+                  value_template: "{{ is_state(repeat.item, 'auto') }}"
+                - action: climate.set_hvac_mode
+                  target:
+                    entity_id: "{{ repeat.item }}"
+                  data:
+                    hvac_mode: "off"
+          - choose:
+              - conditions:
+                  - condition: template
+                    value_template: "{{ notify_devices | length > 0 }}"
+                sequence:
+                  - repeat:
+                        for_each: "{{ notify_devices }}"
+                        sequence:
+                          - service: "notify.mobile_app_{{ device_attr(repeat.item, 'name') | slugify }}"
+                            data:
+                              title: Gestion chauffage
+                              message: >
+                                Arrêt chauffage {{ room_name }}, {{ current_temperature }}{{ temperature_unit }} dehors ({{ now().strftime('%H:%M:%S') }})
+
+      - conditions:
+          - condition: state
+            entity_id: !input window_sensor
+            state: "off"
+          - condition: state
+            entity_id: !input window_opened_flag
+            state: "on"
+        sequence:
+          - service: input_boolean.turn_off
+            target:
+              entity_id: !input window_opened_flag
+          - repeat:
+             for_each: "{{ climate_entities }}"
+             sequence:
+               - action: climate.set_hvac_mode
+                 target:
+                   entity_id: "{{ repeat.item }}"
+                 data:
+                   hvac_mode: "auto"
+          - choose:
+              - conditions:
+                  - condition: template
+                    value_template: "{{ notify_devices | length > 0 }}"
+                sequence:
+                  - repeat:
+                      for_each: "{{ notify_devices }}"
+                      sequence:
+                        - service: "notify.mobile_app_{{ device_attr(repeat.item, 'name') | slugify }}"
+                          data:
+                            title: Gestion chauffage
+                            message: >
+                              Reprise chauffage {{ room_name }}, {{ current_temperature }}{{ temperature_unit }} dehors ({{ now().strftime('%H:%M:%S') }})
+
+mode: single
