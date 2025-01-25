@@ -8,7 +8,7 @@ blueprint:
       - Automatically restores heating once the window is closed.
       - Optionally sends real-time notifications to mobile devices with room and temperature details.
 
-    **Note:** Ensure your window sensors and climate devices are properly configured for seamless operation.
+    **Note:** Ensure your window sensors, climate devices, and temperature sensor are properly configured for seamless operation.
 
     [GitHub Repository](https://github.com/rirethy/WindowHeatingControl)
   domain: automation
@@ -62,14 +62,20 @@ blueprint:
           min: 1
           max: 60
           unit_of_measurement: minutes
+    temperature_sensor:
+      name: Outdoor Temperature Sensor
+      description: Sensor to retrieve the current outdoor temperature for notifications.
+      selector:
+        entity:
+          domain: sensor
 
 variables:
   room_name: !input room_name
   climate_entities: !input climate_entities
   notify_devices: !input notify_devices
   window_opened_flag: !input window_opened_flag
-  current_temperature: "{{ states('sensor.outdoor_temperature') | float }}"
-  temperature_unit: "{{ state_attr('sensor.outdoor_temperature', 'unit_of_measurement') }}"
+  current_temperature: "{{ states(!input temperature_sensor) | float }}"
+  temperature_unit: "{{ state_attr(!input temperature_sensor, 'unit_of_measurement') }}"
   window_open_duration: !input window_open_duration
   window_close_duration: !input window_close_duration
 
