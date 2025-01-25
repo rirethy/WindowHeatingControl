@@ -74,8 +74,9 @@ variables:
   climate_entities: !input climate_entities
   notify_devices: !input notify_devices
   window_opened_flag: !input window_opened_flag
-  current_temperature: "{{ states(!input temperature_sensor) | float }}"
-  temperature_unit: "{{ state_attr(!input temperature_sensor, 'unit_of_measurement') }}"
+  temperature_sensor: !input temperature_sensor
+  current_temperature: "{{ states(temperature_sensor) | float }}"
+  temperature_unit: "{{ state_attr(temperature_sensor, 'unit_of_measurement') }}"
   window_open_duration: !input window_open_duration
   window_close_duration: !input window_close_duration
 
