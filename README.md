@@ -1,4 +1,4 @@
-# EN DEV Window - Heating Control (Open/Close)
+# Window - Heating Control (Open/Close)
 
 This Home Assistant blueprint automates your heating system by responding to window open and close events, ensuring energy efficiency while maintaining comfort. 
 
