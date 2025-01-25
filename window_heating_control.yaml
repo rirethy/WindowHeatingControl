@@ -1,5 +1,5 @@
 blueprint:
-  name: EN DEV Fenêtre - Contrôle du chauffage (ouverture/fermeture)
+  name: Window - Heating Control (Open/Close)
   description: >
     Automate your heating system based on window status to improve energy efficiency. 
 
@@ -10,43 +10,43 @@ blueprint:
 
     **Note:** Ensure your window sensors and climate devices are properly configured for seamless operation.
 
-    [GitHub Repository](https://github.com/your-repo/your-blueprint)
+    [GitHub Repository](https://github.com/rirethy/WindowHeatingControl)
   domain: automation
   input:
     window_sensor:
-      name: Fenêtre - Capteur d'ouverture
-      description: Capteur d'ouverture de la fenêtre.
+      name: Window - Open Sensor
+      description: Sensor to detect if the window is open.
       selector:
         entity:
           domain: binary_sensor
     climate_entities:
-      name: Chauffage - Entités de climatisation
-      description: Entités de climatisation à contrôler.
+      name: Heating - Climate Entities
+      description: Climate entities to control.
       default: []
       selector:
         entity:
           domain: climate
           multiple: true
     notify_devices:
-      name: Appareils de notification (facultatif)
-      description: Liste des appareils mobiles pour les notifications. Laissez vide pour ne pas envoyer de notification.
+      name: Notification Devices (optional)
+      description: List of mobile devices for notifications. Leave empty to disable notifications.
       default: []
       selector:
         device:
           integration: mobile_app
           multiple: true
     room_name:
-      name: Nom de la pièce
-      description: Nom de la pièce pour les notifications.
+      name: Room Name
+      description: Name of the room for notifications.
     window_opened_flag:
-      name: Indicateur de fenêtre ouverte
-      description: Input boolean pour indiquer si la fenêtre a été ouverte.
+      name: Window Opened Flag
+      description: Input boolean to indicate if the window has been opened.
       selector:
         entity:
           domain: input_boolean
     window_open_duration:
-      name: Durée avant arrêt du chauffage (fenêtre ouverte)
-      description: Durée en secondes avant d'arrêter le chauffage lorsque la fenêtre est ouverte.
+      name: Duration Before Heating Stops (Window Open)
+      description: Duration in seconds before turning off heating when the window is open.
       default: 45
       selector:
         number:
@@ -54,8 +54,8 @@ blueprint:
           max: 600
           unit_of_measurement: seconds
     window_close_duration:
-      name: Durée avant reprise du chauffage (fenêtre fermée)
-      description: Durée en minutes avant de reprendre le chauffage lorsque la fenêtre est fermée.
+      name: Duration Before Heating Resumes (Window Closed)
+      description: Duration in minutes before resuming heating when the window is closed.
       default: 15
       selector:
         number:
@@ -68,8 +68,8 @@ variables:
   climate_entities: !input climate_entities
   notify_devices: !input notify_devices
   window_opened_flag: !input window_opened_flag
-  current_temperature: "{{ states('sensor.noisetiers_noisetiers_noisetiers_exterieur_temperature') | float }}"
-  temperature_unit: "{{ state_attr('sensor.noisetiers_noisetiers_noisetiers_exterieur_temperature', 'unit_of_measurement') }}"
+  current_temperature: "{{ states('sensor.outdoor_temperature') | float }}"
+  temperature_unit: "{{ state_attr('sensor.outdoor_temperature', 'unit_of_measurement') }}"
   window_open_duration: !input window_open_duration
   window_close_duration: !input window_close_duration
 
@@ -117,9 +117,9 @@ action:
                         sequence:
                           - service: "notify.mobile_app_{{ device_attr(repeat.item, 'name') | slugify }}"
                             data:
-                              title: Gestion chauffage
+                              title: Heating Management
                               message: >
-                                Arrêt chauffage {{ room_name }}, {{ current_temperature }}{{ temperature_unit }} dehors ({{ now().strftime('%H:%M:%S') }})
+                                Heating stopped in {{ room_name }}, {{ current_temperature }}{{ temperature_unit }} outside ({{ now().strftime('%H:%M:%S') }})
 
       - conditions:
           - condition: state
@@ -150,8 +150,8 @@ action:
                       sequence:
                         - service: "notify.mobile_app_{{ device_attr(repeat.item, 'name') | slugify }}"
                           data:
-                            title: Gestion chauffage
+                            title: Heating Management
                             message: >
-                              Reprise chauffage {{ room_name }}, {{ current_temperature }}{{ temperature_unit }} dehors ({{ now().strftime('%H:%M:%S') }})
+                              Heating resumed in {{ room_name }}, {{ current_temperature }}{{ temperature_unit }} outside ({{ now().strftime('%H:%M:%S') }})
 
 mode: single
