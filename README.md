@@ -1,75 +1,55 @@
-# Window - Heating Control (Open/Close)
+# 🌡️ Window Heating Control (WHC) for Home Assistant
 
-This Home Assistant blueprint automates your heating system by responding to window open and close events, ensuring energy efficiency while maintaining comfort. 
+[![Ouvrir votre instance Home Assistant et importer ce blueprint.](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Frirethy%2FWindowHeatingControl%2Fblob%2Fmain%2Fwindow_heating_control.yaml)
 
-## Features
-- **Disable heating when a window is opened**: Automatically turns off the heating in the specified room(s) when a window is detected as open for a configurable duration.
-- **Restore heating when the window is closed**: Automatically resumes heating after the window has been closed for a configurable duration.
-- **Real-time notifications** (optional): Sends notifications to selected mobile devices with details about the action taken, including the room name, temperature, and timestamp.
+Une automatisation avancée et robuste pour Home Assistant qui gère intelligemment vos radiateurs selon l'état de vos fenêtres. Ne gaspillez plus d'énergie en aérant vos pièces !
 
-## Requirements
-1. **Window Sensor**: A binary sensor that detects whether the window is open or closed.
-2. **Climate Entities**: Climate devices (e.g., thermostats) to control the heating.
-3. **Notification Devices** (optional): Devices integrated with Home Assistant's mobile app to receive notifications.
-4. **Input Boolean**: An input boolean to track if the window has been opened.
+## ✨ Fonctionnalités
 
-## Blueprint Inputs
-| Input Name                | Description                                                                 | Default Value         |
-|---------------------------|-----------------------------------------------------------------------------|-----------------------|
-| **`window_sensor`**       | Binary sensor to detect if the window is open or closed.                    | Required              |
-| **`climate_entities`**    | List of climate devices to control.                                        | Empty list (optional) |
-| **`notify_devices`**      | List of mobile devices for notifications. Leave empty to disable.          | Empty list (optional) |
-| **`room_name`**           | Name of the room for use in notifications.                                 | Required              |
-| **`window_opened_flag`**  | Input boolean to indicate if the window has been opened.                   | Required              |
-| **`window_open_duration`**| Time (in seconds) before turning off heating after the window is opened.   | 45 seconds            |
-| **`window_close_duration`**| Time (in minutes) before resuming heating after the window is closed.      | 15 minutes            |
+- **💾 Sauvegarde & Restauration Précise** : Utilise une scène dynamique pour mémoriser l'état exact (température de consigne, mode, etc.) avant la coupure et le restaurer fidèlement à la fermeture.
+- **🚨 Alerte Oubli** : Envoie une notification prioritaire (rouge) si une fenêtre est restée ouverte au-delà d'un délai défini.
+- **🛡️ Sécurité Anti-Redémarrage** : Grâce à un flag (`input_boolean`) et une logique de "fallback", le chauffage redémarre en mode `auto` même si le serveur a redémarré pendant que la fenêtre était ouverte.
+- **🍃 Mode Été Natif** : L'automatisation ignore l'ouverture des fenêtres si le chauffage est déjà éteint, évitant les notifications inutiles durant la belle saison.
+- **📱 Notifications Interactives** : Alertes avec température extérieure, horodatage `(HH:MM)` et lien direct vers votre tableau de bord favori au clic sur le téléphone.
 
-## Variables
-| Variable Name             | Description                                                                 |
-|---------------------------|-----------------------------------------------------------------------------|
-| `room_name`               | Name of the room where the automation is applied.                          |
-| `climate_entities`        | List of climate entities passed as input.                                  |
-| `notify_devices`          | List of devices for sending notifications.                                 |
-| `window_opened_flag`      | Input boolean to indicate if the window has been opened.                   |
-| `current_temperature`     | The current outdoor temperature (replace with your temperature sensor).    |
-| `temperature_unit`        | Unit of measurement for temperature (e.g., °C or °F).                      |
+## ⚙️ Détails des Paramètres (Inputs)
 
-## Automation Flow
-### When the Window is Opened:
-1. If the window remains open for the specified `window_open_duration`:
-   - Sets the `window_opened_flag` to `on`.
-   - Turns off the specified climate devices in `auto` mode.
-   - Sends a notification (if configured) to the selected devices with room and temperature details.
+| Paramètre | Description |
+| :--- | :--- |
+| **Capteur de fenêtre** | L'entité `binary_sensor` qui détecte l'ouverture. |
+| **Thermostats** | Liste des entités `climate` à piloter dans la pièce. |
+| **Nom de la pièce** | Utilisé pour personnaliser les notifications et nommer la scène de sauvegarde. |
+| **Boolean d'état (Flag)** | Un `input_boolean` qui permet de mémoriser que l'automatisation a coupé le chauffage. |
+| **Délai avant coupure** | Temps d'attente (secondes) avant d'éteindre pour ignorer les ouvertures rapides. |
+| **Délai avant remise** | Temps d'attente (minutes) après fermeture avant de relancer le chauffage. |
+| **Délai alerte Oubli** | Temps (minutes) après lequel une alerte "Urgence" est envoyée. |
+| **Capteur de température** | Entrée météo ou sonde locale pour enrichir les notifications. |
+| **Chemin au clic** | URL relative (ex: `/lovelace/thermostats`) ouvrant la page liée à la notification. |
 
-### When the Window is Closed:
-1. If the window remains closed for the specified `window_close_duration`:
-   - Turns the `window_opened_flag` back to `off`.
-   - Restores the climate devices to `auto` mode.
-   - Sends a notification (if configured) to the selected devices.
+## 🔧 Configuration des Entrées (Helpers)
 
-## Installation
-1. **Copy the Blueprint**: Copy the YAML code into a new blueprint in Home Assistant.
-2. **Import the Blueprint**: Navigate to **Settings > Automations & Scenes > Blueprints**, and create a new blueprint by pasting the YAML code.
-3. **Create an Automation**:
-   - Use the imported blueprint to create an automation.
-   - Fill in the required inputs, such as the window sensor, climate entities, and room name.
-4. **Test the Automation**:
-   - Open and close the window to verify the behavior.
-   - Check logs for any issues.
+Ce blueprint nécessite un **Flag (bouton d'état)** pour chaque pièce afin de garantir une reprise parfaite après redémarrage.
 
-## Example Notification
-- **Title**: "Heating Management"
-- **Message (window opened)**: "Heating stopped in Living Room, 5°C outside (14:30:45)"
-- **Message (window closed)**: "Heating resumed in Living Room, 5°C outside (14:45:30)"
+### Option A : Via l'interface (Simple)
+1. Allez dans **Paramètres** > **Appareils et services** > **Entrées**.
+2. Cliquez sur **+ Créer une entrée** > **Interrupteur (input_boolean)**.
+3. Nommez-le, par exemple : `Flag Chauffage Salon`.
 
-## Notes
-- Update the `current_temperature` variable to match your temperature sensor entity.
-- Notifications are optional. If you don't want notifications, leave `notify_devices` empty.
-- Ensure the input boolean (`window_opened_flag`) is created in Home Assistant before using this blueprint.
+### Option B : Via le fichier `configuration.yaml` (Rapide)
+```yaml
+input_boolean:
+  flag_chauffage_salon:
+    name: "Flag Chauffage Salon"
+    icon: mdi:window-open-variant
+```
 
-## Contributing
-Feel free to contribute to this blueprint by submitting a pull request or opening an issue on [GitHub](https://github.com/your-repo/your-blueprint).
+###🚀 Installation
+Assurez-vous d'avoir créé votre input_boolean (voir section ci-dessus).
 
-## License
-This blueprint is licensed under the MIT License.
+Cliquez sur le bouton Import Blueprint en haut de ce README.
 
+Home Assistant vous proposera d'importer le fichier directement depuis GitHub.
+
+Allez dans Paramètres > Automatisations et scènes > Créer une automatisation.
+
+Sélectionnez Window Heating Control (WHC) dans la liste et remplissez vos entités.
