@@ -1,73 +1,82 @@
 blueprint:
-  name: Window - Heating Control (Open/Close) [WHC]
-  description: >
-    Automate your heating system based on window status to improve energy efficiency. 
+  name: Window - Heating Control (Open/Close/Forgotten) [WHC]
+  description: |
+    ## 🌡️ Window Heating Control (WHC) V2.0
+    Optimisez votre consommation d'énergie en automatisant l'arrêt du chauffage lors de l'ouverture des fenêtres.
 
-    ## Features:
-      - Temporarily disables heating when a window is opened.
-      - Automatically restores heating once the window is closed.
-      - Optionally sends real-time notifications to mobile devices with room and temperature details.
+    ### 🛠️ Fonctionnalités :
+    - **Sauvegarde d'état :** Mémorise le mode et la température via une scène dynamique.
+    - **Restauration intelligente :** Relance le chauffage à la fermeture (avec sécurité anti-crash).
+    - **Alerte "Oubli" :** Notification prioritaire si la fenêtre reste ouverte trop longtemps.
+    - **Optimisation :** Ne s'exécute pas si le chauffage est déjà éteint.
+    - **Notifications :** Alertes multilingues (FR/EN) avec température extérieure, heure et lien direct.
 
-    **Note:** Ensure your window sensors, climate devices, and temperature sensor are properly configured for seamless operation.
-
-    [GitHub Repository](https://github.com/rirethy/WindowHeatingControl)
+    [Documentation & Support](https://github.com/rirethy/WindowHeatingControl)
   domain: automation
   input:
     window_sensor:
-      name: Window - Open Sensor
-      description: Sensor to detect if the window is open.
+      name: Capteur de fenêtre
       selector:
         entity:
           domain: binary_sensor
     climate_entities:
-      name: Heating - Climate Entities
-      description: Climate entities to control.
-      default: []
+      name: Thermostats
       selector:
         entity:
           domain: climate
           multiple: true
     notify_devices:
-      name: Notification Devices (optional)
-      description: List of mobile devices for notifications. Leave empty to disable notifications.
+      name: Appareils de notification (optionnel)
       default: []
       selector:
         device:
           integration: mobile_app
           multiple: true
+    dashboard_path:
+      name: Chemin au clic (Notification)
+      default: "/lovelace"
     room_name:
-      name: Room Name
-      description: Name of the room for notifications.
+      name: Nom de la pièce
     window_opened_flag:
-      name: Window Opened Flag
-      description: Input boolean to indicate if the window has been opened.
+      name: Boolean d'état (Flag)
       selector:
         entity:
           domain: input_boolean
     window_open_duration:
-      name: Duration Before Heating Stops (Window Open)
-      description: Duration in seconds before turning off heating when the window is open.
+      name: Délai avant coupure chauffage suite à ouverture fenêtre (Secondes)
       default: 45
       selector:
         number:
-          min: 10
+          min: 5
           max: 600
           unit_of_measurement: seconds
+    window_forgotten_duration:
+      name: Délai avant alerte oubli fenêtre restée ouverte (Minutes)
+      default: 30
+      selector:
+        number:
+          min: 5
+          max: 120
+          unit_of_measurement: minutes
     window_close_duration:
-      name: Duration Before Heating Resumes (Window Closed)
-      description: Duration in minutes before resuming heating when the window is closed.
+      name: Délai avant remise en route chauffage suite à fermeture fenêtre (Minutes)
       default: 15
       selector:
         number:
-          min: 1
+          min: 0
           max: 60
           unit_of_measurement: minutes
     temperature_sensor:
-      name: Outdoor Temperature Sensor
-      description: Sensor to retrieve the current outdoor temperature for notifications.
+      name: Capteur de température extérieure
       selector:
         entity:
           domain: sensor
+    language:
+      name: Langue
+      default: fr
+      selector:
+        language:
+          languages: [en, fr]
 
 variables:
   room_name: !input room_name
@@ -75,10 +84,24 @@ variables:
   notify_devices: !input notify_devices
   window_opened_flag: !input window_opened_flag
   temperature_sensor: !input temperature_sensor
-  current_temperature: "{{ states(temperature_sensor) | float }}"
-  temperature_unit: "{{ state_attr(temperature_sensor, 'unit_of_measurement') }}"
-  window_open_duration: !input window_open_duration
-  window_close_duration: !input window_close_duration
+  language: !input language
+  dashboard_path: !input dashboard_path
+  current_temp: "{{ states(temperature_sensor) if states(temperature_sensor) not in ['unknown', 'unavailable'] else '?' }}"
+  unit: "{{ state_attr(temperature_sensor, 'unit_of_measurement') | default('°C') }}"
+  scene_id: "heating_before_{{ room_name | slugify }}"
+  txt:
+    fr:
+      title: "Gestion du chauffage"
+      stop: "Chauffage arrêté dans"
+      resume: "Chauffage rallumé dans"
+      outside: "dehors"
+      forgotten: "⚠️ Fenêtre oubliée ouverte :"
+    en:
+      title: "Heating Management"
+      stop: "Heating stopped in"
+      resume: "Heating resumed in"
+      outside: "outside"
+      forgotten: "⚠️ Window left open in:"
 
 trigger:
   - platform: state
@@ -86,79 +109,121 @@ trigger:
     to: "on"
     for:
       seconds: !input window_open_duration
+    id: "open"
   - platform: state
     entity_id: !input window_sensor
     to: "off"
     for:
       minutes: !input window_close_duration
-
-condition: []
+    id: "closed"
+  - platform: state
+    entity_id: !input window_sensor
+    to: "on"
+    for:
+      minutes: !input window_forgotten_duration
+    id: "forgotten"
 
 action:
   - choose:
+      # --- OUVERTURE ---
       - conditions:
-          - condition: state
-            entity_id: !input window_sensor
-            state: "on"
+          - condition: trigger
+            id: "open"
+          - condition: template
+            value_template: "{{ expand(climate_entities) | selectattr('state', 'ne', 'off') | list | length > 0 }}"
         sequence:
-          - service: input_boolean.turn_on
+          - action: scene.create
+            data:
+              scene_id: "{{ scene_id }}"
+              snapshot_entities: "{{ climate_entities }}"
+          - action: input_boolean.turn_on
             target:
               entity_id: !input window_opened_flag
-          - repeat:
-              for_each: "{{ climate_entities }}"
-              sequence:
-                - condition: template
-                  value_template: "{{ is_state(repeat.item, 'auto') }}"
-                - action: climate.set_hvac_mode
-                  target:
-                    entity_id: "{{ repeat.item }}"
-                  data:
-                    hvac_mode: "off"
-          - choose:
-              - conditions:
-                  - condition: template
-                    value_template: "{{ notify_devices | length > 0 }}"
-                sequence:
-                  - repeat:
-                        for_each: "{{ notify_devices }}"
-                        sequence:
-                          - service: "notify.mobile_app_{{ device_attr(repeat.item, 'name') | slugify }}"
-                            data:
-                              title: Heating Management
-                              message: >
-                                Heating stopped in {{ room_name }}, {{ current_temperature }}{{ temperature_unit }} outside ({{ now().strftime('%H:%M:%S') }})
+          - action: climate.set_hvac_mode
+            target:
+              entity_id: "{{ climate_entities }}"
+            data:
+              hvac_mode: "off"
+          - if:
+              - condition: template
+                value_template: "{{ notify_devices | length > 0 }}"
+            then:
+              - repeat:
+                  for_each: "{{ notify_devices }}"
+                  sequence:
+                    - action: "notify.mobile_app_{{ device_attr(repeat.item, 'name') | slugify }}"
+                      data:
+                        title: "{{ txt[language].title }}"
+                        message: "{{ txt[language].stop }} {{ room_name }}, {{ current_temp }}{{ unit }} {{ txt[language].outside }} ({{ now().strftime('%H:%M') }})"
+                        data:
+                          clickAction: "{{ dashboard_path }}"
+                          url: "{{ dashboard_path }}"
 
+      # --- FERMETURE (Avec sécurité redémarrage) ---
       - conditions:
-          - condition: state
-            entity_id: !input window_sensor
-            state: "off"
+          - condition: trigger
+            id: "closed"
           - condition: state
             entity_id: !input window_opened_flag
             state: "on"
         sequence:
-          - service: input_boolean.turn_off
+          - action: input_boolean.turn_off
             target:
               entity_id: !input window_opened_flag
-          - repeat:
-             for_each: "{{ climate_entities }}"
-             sequence:
-               - action: climate.set_hvac_mode
-                 target:
-                   entity_id: "{{ repeat.item }}"
-                 data:
-                   hvac_mode: "auto"
-          - choose:
-              - conditions:
-                  - condition: template
-                    value_template: "{{ notify_devices | length > 0 }}"
-                sequence:
-                  - repeat:
-                      for_each: "{{ notify_devices }}"
-                      sequence:
-                        - service: "notify.mobile_app_{{ device_attr(repeat.item, 'name') | slugify }}"
-                          data:
-                            title: Heating Management
-                            message: >
-                              Heating resumed in {{ room_name }}, {{ current_temperature }}{{ temperature_unit }} outside ({{ now().strftime('%H:%M:%S') }})
 
-mode: single
+          # 1. Tentative de restauration de la scène
+          - continue_on_error: true
+            action: scene.turn_on
+            target:
+              entity_id: "scene.{{ scene_id }}"
+
+          # 2. Sécurité Fallback : Si les thermostats sont toujours sur OFF (scène perdue), on force AUTO
+          - if:
+              - condition: template
+                value_template: "{{ expand(climate_entities) | selectattr('state', 'eq', 'off') | list | length > 0 }}"
+            then:
+              - action: climate.set_hvac_mode
+                target:
+                  entity_id: "{{ climate_entities }}"
+                data:
+                  hvac_mode: "auto"
+
+          - if:
+              - condition: template
+                value_template: "{{ notify_devices | length > 0 }}"
+            then:
+              - repeat:
+                  for_each: "{{ notify_devices }}"
+                  sequence:
+                    - action: "notify.mobile_app_{{ device_attr(repeat.item, 'name') | slugify }}"
+                      data:
+                        title: "{{ txt[language].title }}"
+                        message: "{{ txt[language].resume }} {{ room_name }}, {{ current_temp }}{{ unit }} {{ txt[language].outside }} ({{ now().strftime('%H:%M') }})"
+                        data:
+                          clickAction: "{{ dashboard_path }}"
+                          url: "{{ dashboard_path }}"
+
+      # --- OUBLI ---
+      - conditions:
+          - condition: trigger
+            id: "forgotten"
+        sequence:
+          - if:
+              - condition: template
+                value_template: "{{ notify_devices | length > 0 }}"
+            then:
+              - repeat:
+                  for_each: "{{ notify_devices }}"
+                  sequence:
+                    - action: "notify.mobile_app_{{ device_attr(repeat.item, 'name') | slugify }}"
+                      data:
+                        title: "OUBLI FENÊTRE"
+                        message: "{{ txt[language].forgotten }} {{ room_name }}"
+                        data:
+                          priority: high
+                          ttl: 0
+                          color: "#e74c3c"
+                          clickAction: "{{ dashboard_path }}"
+                          url: "{{ dashboard_path }}"
+
+mode: restart
